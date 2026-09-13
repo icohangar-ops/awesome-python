@@ -13,10 +13,22 @@ from __future__ import annotations
 
 import re
 from typing import TypedDict
+from urllib.parse import urlparse
 
 from markdown_it import MarkdownIt
 from markdown_it.tree import SyntaxTreeNode
-from markupsafe import escape
+from markupsafe import Markup, escape
+
+_SAFE_URL_SCHEMES = frozenset({"http", "https"})
+
+
+def _safe_url(url: str) -> str:
+    """Allow only http(s) URLs with a host. Drops javascript:, data:, and relatives."""
+    candidate = url.strip()
+    parsed = urlparse(candidate)
+    if parsed.scheme.lower() in _SAFE_URL_SCHEMES and parsed.netloc:
+        return candidate
+    return ""
 
 
 class AlsoSee(TypedDict):
@@ -89,8 +101,13 @@ def _render_inline(children: list[SyntaxTreeNode], *, html: bool) -> str:
             case "link":
                 inner = _render_inline(child.children, html=html)
                 if html:
-                    href = str(escape(_href(child)))
-                    parts.append(f'<a href="{href}" target="_blank" rel="noopener">{inner}</a>')
+                    href = _href(child)
+                    if href:
+                        parts.append(
+                            f'<a href="{escape(href)}" target="_blank" rel="noopener">{inner}</a>'
+                        )
+                    else:
+                        parts.append(inner)
                 else:
                     parts.append(inner)
             case "em":
@@ -102,9 +119,13 @@ def _render_inline(children: list[SyntaxTreeNode], *, html: bool) -> str:
     return "".join(parts)
 
 
-def render_inline_html(children: list[SyntaxTreeNode]) -> str:
-    """Render inline AST nodes to HTML with proper escaping."""
-    return _render_inline(children, html=True)
+def render_inline_html(children: list[SyntaxTreeNode]) -> Markup:
+    """Render inline AST nodes to HTML with proper escaping.
+
+    Returns Markup so Jinja autoescape will not double-escape the trusted tags
+    we emit (a/em/strong/code) after escaping every untrusted string.
+    """
+    return Markup(_render_inline(children, html=True))
 
 
 def render_inline_text(children: list[SyntaxTreeNode]) -> str:
@@ -163,9 +184,9 @@ def _find_child(node: SyntaxTreeNode, child_type: str) -> SyntaxTreeNode | None:
 
 
 def _href(link: SyntaxTreeNode) -> str:
-    """Return the link's href attribute as a string, or '' if missing."""
+    """Return a safe http(s) href, or '' if missing or a dangerous scheme."""
     href = link.attrGet("href")
-    return href if isinstance(href, str) else ""
+    return _safe_url(href) if isinstance(href, str) else ""
 
 
 def _find_inline(node: SyntaxTreeNode) -> SyntaxTreeNode | None:
@@ -187,9 +208,9 @@ def _extract_description_html(inline: SyntaxTreeNode, first_link: SyntaxTreeNode
         return ""
     desc_children = inline.children[link_idx + 1 :]
     if not desc_children:
-        return ""
+        return Markup("")
     html = render_inline_html(desc_children)
-    return _DESC_SEP_RE.sub("", html)
+    return Markup(_DESC_SEP_RE.sub("", str(html)))
 
 
 def _parse_list_entries(
@@ -393,7 +414,7 @@ def _parse_sponsor_item(inline: SyntaxTreeNode) -> ParsedSponsor | None:
         return ParsedSponsor(
             name=render_inline_text(link.children),
             url=_href(link),
-            description=_SPONSOR_SEP_RE.sub("", desc_html),
+            description=Markup(_SPONSOR_SEP_RE.sub("", str(desc_html))),
         )
     return None
 

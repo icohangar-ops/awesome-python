@@ -13,6 +13,7 @@ from typing import TypedDict
 
 from fetch_pypi_downloads_via_clickpy import OVERRIDES_FILE, normalize
 from jinja2 import Environment, FileSystemLoader
+from markupsafe import Markup
 from readme_parser import AlsoSee, ParsedGroup, ParsedSection, parse_readme, parse_sponsors, slugify
 
 GITHUB_REPO_URL_RE = re.compile(r"^https?://github\.com/([^/]+/[^/]+?)(?:\.git)?/?$")
@@ -328,6 +329,11 @@ def synthetic_category(name: str, slug: str) -> SyntheticCategory:
     return {"name": name, "slug": slug, "description": "", "description_html": ""}
 
 
+def script_json(text: str) -> Markup:
+    """JSON for a <script> tag: escape </ so it cannot close the tag early."""
+    return Markup(text.replace("</", "<\\/"))
+
+
 def write_sitemap_xml(path: Path, urls: Sequence[tuple[str, str]]) -> None:
     ET.register_namespace("", SITEMAP_NS)
     urlset = ET.Element(f"{{{SITEMAP_NS}}}urlset")
@@ -635,11 +641,13 @@ def build(repo_root: Path) -> None:
         shutil.rmtree(site_dir)
     site_dir.mkdir(parents=True)
 
-    filter_urls_json = json.dumps(filter_urls, sort_keys=True, ensure_ascii=False).replace("</", "<\\/")
-    homepage_json_ld = json.dumps(
-        build_homepage_json_ld(entries, len(categories)),
-        ensure_ascii=False,
-    ).replace("</", "<\\/")
+    filter_urls_json = script_json(json.dumps(filter_urls, sort_keys=True, ensure_ascii=False))
+    homepage_json_ld = script_json(
+        json.dumps(
+            build_homepage_json_ld(entries, len(categories)),
+            ensure_ascii=False,
+        )
+    )
 
     tpl_index = env.get_template("index.html")
     (site_dir / "index.html").write_text(
@@ -681,10 +689,12 @@ def build(repo_root: Path) -> None:
         if parent_category:
             breadcrumbs.append((parent_category["name"], category_public_url(parent_category)))
         breadcrumbs.append((category["name"], category_url))
-        category_json_ld = json.dumps(
-            build_category_json_ld(category_title.removesuffix(" - Awesome Python"), category_url, category_description, entries, breadcrumbs),
-            ensure_ascii=False,
-        ).replace("</", "<\\/")
+        category_json_ld = script_json(
+            json.dumps(
+                build_category_json_ld(category_title.removesuffix(" - Awesome Python"), category_url, category_description, entries, breadcrumbs),
+                ensure_ascii=False,
+            )
+        )
         (page_dir / "index.html").write_text(
             tpl_category.render(
                 category=category,
@@ -743,7 +753,7 @@ def build(repo_root: Path) -> None:
         tpl_sponsorship.render(
             hero_stats=hero_stats,
             sponsorship_description=SPONSORSHIP_DESCRIPTION,
-            sponsorship_json_ld=json.dumps(build_sponsorship_json_ld(), ensure_ascii=False).replace("</", "<\\/"),
+            sponsorship_json_ld=script_json(json.dumps(build_sponsorship_json_ld(), ensure_ascii=False)),
         ),
         encoding="utf-8",
     )

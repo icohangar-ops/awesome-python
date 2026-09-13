@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block extra_head %}
-<script type="application/ld+json">{{ homepage_json_ld | safe }}</script>
+<script type="application/ld+json">{{ homepage_json_ld }}</script>
 {% endblock %}
 {% block header %}
 <header class="hero">
@@ -88,7 +88,7 @@
         >
           <span class="sponsor-name">{{ sponsor.name }}</span>
         </a>
-        <p class="sponsor-desc">{{ sponsor.description | safe }}</p>
+        <p class="sponsor-desc">{{ sponsor.description }}</p>
       </li>
       {% endfor %}
     </ul>
@@ -96,7 +96,7 @@
 </section>
 {% endif %}
 
-<script type="application/json" id="filter-urls">{{ filter_urls_json | safe }}</script>
+<script type="application/json" id="filter-urls">{{ filter_urls_json }}</script>
 <section class="results-section" id="library-index">
   <div class="results-intro section-shell" data-reveal>
     <div>
@@ -258,7 +258,7 @@
         <tr class="desc-row" aria-hidden="true" hidden>
           <td class="col-num"></td>
           <td colspan="6">
-            <div class="desc-text">{{ entry.description | safe }}</div>
+            <div class="desc-text">{{ entry.description }}</div>
           </td>
         </tr>
         {% endif %}
@@ -267,7 +267,7 @@
           <td colspan="5">
             <div class="expand-content">
               {% if entry.description %}
-              <div class="expand-desc">{{ entry.description | safe }}</div>
+              <div class="expand-desc">{{ entry.description }}</div>
               {% endif %} {% if entry.also_see %}
               <div class="expand-also-see">
                 Also see: {% for see in entry.also_see %}<a
