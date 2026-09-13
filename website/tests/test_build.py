@@ -884,6 +884,58 @@ class TestBuild:
         data = json.loads(block)
         assert any("Sneaky" in key for key in data)
 
+    def test_build_escapes_html_in_entry_description(self, tmp_path):
+        readme = textwrap.dedent("""\
+            # T
+
+            Intro.
+
+            ## Projects
+
+            ### Widgets
+
+            _Widget libraries._
+
+            - [w1](https://example.com) - A <script>alert(1)</script> widget.
+
+            # Contributing
+
+            Done.
+        """)
+        self._copy_real_templates(tmp_path)
+        (tmp_path / "README.md").write_text(readme, encoding="utf-8")
+        build(tmp_path)
+
+        html = (tmp_path / "website" / "output" / "index.html").read_text(encoding="utf-8")
+        assert "<script>alert(1)</script>" not in html
+        assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+
+    def test_build_drops_javascript_hrefs(self, tmp_path):
+        readme = textwrap.dedent("""\
+            # T
+
+            Intro.
+
+            ## Projects
+
+            ### Widgets
+
+            _See [x](javascript:alert(1))._
+
+            - [w1](javascript:alert(1)) - A widget.
+
+            # Contributing
+
+            Done.
+        """)
+        self._copy_real_templates(tmp_path)
+        (tmp_path / "README.md").write_text(readme, encoding="utf-8")
+        build(tmp_path)
+
+        html = (tmp_path / "website" / "output" / "index.html").read_text(encoding="utf-8")
+        assert "javascript:" not in html.lower()
+        assert "alert(1)" not in html
+
     def test_build_creates_group_pages(self, tmp_path):
         readme = textwrap.dedent("""\
             # T

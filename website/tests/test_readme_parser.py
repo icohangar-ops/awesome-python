@@ -2,21 +2,31 @@
 
 import re
 import textwrap
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
+from markdown_it import MarkdownIt
+from markdown_it.tree import SyntaxTreeNode
 
 from fetch_pypi_downloads_via_clickpy import PYPI_NAME_RE, load_overrides, normalize
 from readme_parser import (
     _find_inline,
     _parse_section_entries,
+    _safe_url,
     parse_readme,
     render_inline_html,
     render_inline_text,
 )
 
-from markdown_it import MarkdownIt
-from markdown_it.tree import SyntaxTreeNode
+
+class _AttrCollector(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.attrs: list[tuple[str, dict[str, str]]] = []
+
+    def handle_starttag(self, tag, attrs):
+        self.attrs.append((tag, dict(attrs)))
 
 
 def _parse_inline(md_text: str) -> list[SyntaxTreeNode]:
@@ -429,6 +439,30 @@ class TestParseSectionEntries:
         entries = _parse_section_entries(nodes)
         assert "<script>" not in entries[0]["description"]
         assert "&lt;script&gt;" in entries[0]["description"]
+
+    def test_dangerous_schemes_never_become_hrefs(self):
+        for raw in (
+            "[name](javascript:alert(1))",
+            "[name](data:text/html,<script>alert(1)</script>)",
+            '[name](https://x.com/"onclick="alert(1))',
+        ):
+            html = str(render_inline_html(_parse_inline(raw)))
+            assert "<script>" not in html
+            parser = _AttrCollector()
+            parser.feed(f"<div>{html}</div>")
+            for tag, attrs in parser.attrs:
+                assert "onclick" not in attrs
+                href = attrs.get("href", "")
+                assert not href.lower().startswith(("javascript:", "data:", "vbscript:"))
+
+    def test_safe_url_rejects_dangerous_schemes(self):
+        assert _safe_url("javascript:alert(1)") == ""
+        assert _safe_url("data:text/html,x") == ""
+        assert _safe_url("vbscript:x") == ""
+        assert _safe_url("//evil.com") == ""
+        assert _safe_url("/relative") == ""
+        assert _safe_url("https://example.com/foo") == "https://example.com/foo"
+        assert _safe_url("http://example.com") == "http://example.com"
 
 
 class TestParseRealReadme:

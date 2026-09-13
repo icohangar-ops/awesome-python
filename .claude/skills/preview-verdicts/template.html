@@ -70,39 +70,127 @@ try { state = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
 
 function rowId(section, name) { return section + "::" + name; }
 
+function safeHttpUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return url;
+  } catch (e) {}
+  return "";
+}
+
 function render() {
   const app = document.getElementById("app");
-  let html = "", lastSection = "";
+  app.replaceChildren();
+  let lastSection = "";
   for (const [section, subcat, rows] of DATA) {
-    if (section !== lastSection) { html += `<h2>${section}</h2>`; lastSection = section; }
+    if (section !== lastSection) {
+      const h2 = document.createElement("h2");
+      h2.textContent = section;
+      app.appendChild(h2);
+      lastSection = section;
+    }
     const parts = subcat.split(" — ");
-    html += `<h3>${parts[0]}${parts[1] ? ` <span class="note">— ${parts[1]}</span>` : ""}</h3>`;
-    html += `<table><tr><th>Entry</th><th style="text-align:right">Downloads/mo</th><th>My verdict</th><th>My reason</th><th>Yours</th><th>Your reason (optional)</th></tr>`;
+    const h3 = document.createElement("h3");
+    h3.appendChild(document.createTextNode(parts[0]));
+    if (parts[1]) {
+      h3.appendChild(document.createTextNode(" "));
+      const note = document.createElement("span");
+      note.className = "note";
+      note.textContent = "— " + parts[1];
+      h3.appendChild(note);
+    }
+    app.appendChild(h3);
+
+    const table = document.createElement("table");
+    const header = document.createElement("tr");
+    const headers = [
+      ["Entry", ""],
+      ["Downloads/mo", "text-align:right"],
+      ["My verdict", ""],
+      ["My reason", ""],
+      ["Yours", ""],
+      ["Your reason (optional)", ""],
+    ];
+    for (const [label, style] of headers) {
+      const th = document.createElement("th");
+      th.textContent = label;
+      if (style) th.style.cssText = style;
+      header.appendChild(th);
+    }
+    table.appendChild(header);
+
     for (const [name, url, dl, mine, reason] of rows) {
       const id = rowId(section, name);
       const s = state[id] || {};
       const yours = s.verdict || mine;
       const changed = yours !== mine || (s.feedback || "").trim() !== "";
-      html += `<tr id="${cssId(id)}" class="${changed ? "changed" : ""}">
-        <td class="name"><a href="${url}" target="_blank" rel="noopener">${name}</a></td>
-        <td class="dl">${dl}</td>
-        <td class="mine"><span class="badge ${mine}">${mine.toUpperCase()}</span></td>
-        <td class="reason">${reason}</td>
-        <td class="yours"><span class="seg">
-          <button class="k ${yours === "keep" ? "on" : ""}" onclick="setV('${esc(id)}','keep')">Keep</button>
-          <button class="d ${yours === "drop" ? "on" : ""}" onclick="setV('${esc(id)}','drop')">Drop</button>
-        </span></td>
-        <td class="fb"><input value="${(s.feedback || "").replace(/"/g, "&quot;")}" oninput="setF('${esc(id)}', this.value)" placeholder="why…"></td>
-      </tr>`;
+      const tr = document.createElement("tr");
+      tr.id = cssId(id);
+      if (changed) tr.className = "changed";
+
+      const nameTd = document.createElement("td");
+      nameTd.className = "name";
+      const a = document.createElement("a");
+      const href = safeHttpUrl(url);
+      if (href) a.href = href;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = name;
+      nameTd.appendChild(a);
+
+      const dlTd = document.createElement("td");
+      dlTd.className = "dl";
+      dlTd.textContent = dl;
+
+      const mineTd = document.createElement("td");
+      mineTd.className = "mine";
+      const badge = document.createElement("span");
+      badge.className = "badge " + mine;
+      badge.textContent = mine.toUpperCase();
+      mineTd.appendChild(badge);
+
+      const reasonTd = document.createElement("td");
+      reasonTd.className = "reason";
+      reasonTd.textContent = reason;
+
+      const yoursTd = document.createElement("td");
+      yoursTd.className = "yours";
+      const seg = document.createElement("span");
+      seg.className = "seg";
+      const keepBtn = document.createElement("button");
+      keepBtn.className = "k" + (yours === "keep" ? " on" : "");
+      keepBtn.textContent = "Keep";
+      keepBtn.addEventListener("click", function () { setV(id, "keep"); });
+      const dropBtn = document.createElement("button");
+      dropBtn.className = "d" + (yours === "drop" ? " on" : "");
+      dropBtn.textContent = "Drop";
+      dropBtn.addEventListener("click", function () { setV(id, "drop"); });
+      seg.appendChild(keepBtn);
+      seg.appendChild(dropBtn);
+      yoursTd.appendChild(seg);
+
+      const fbTd = document.createElement("td");
+      fbTd.className = "fb";
+      const input = document.createElement("input");
+      input.value = s.feedback || "";
+      input.placeholder = "why…";
+      input.addEventListener("input", function () { setF(id, this.value); });
+      fbTd.appendChild(input);
+
+      tr.appendChild(nameTd);
+      tr.appendChild(dlTd);
+      tr.appendChild(mineTd);
+      tr.appendChild(reasonTd);
+      tr.appendChild(yoursTd);
+      tr.appendChild(fbTd);
+      table.appendChild(tr);
     }
-    html += `</table>`;
+    app.appendChild(table);
   }
-  app.innerHTML = html;
   updateCounts();
 }
 
 function cssId(id) { return "r-" + id.replace(/[^a-zA-Z0-9]/g, "_"); }
-function esc(id) { return id.replace(/'/g, "\\'"); }
 
 function setV(id, v) { state[id] = state[id] || {}; state[id].verdict = v; save(); render(); }
 function setF(id, f) {
@@ -141,7 +229,21 @@ function updateCounts() {
     if (yours === "keep") keeps++;
     if (yours !== mine) changed++;
   }
-  document.getElementById("counts").innerHTML = `<b>${keeps}</b> keep · <b>${total - keeps}</b> drop of <b>${total}</b> &nbsp;|&nbsp; <b>${changed}</b> verdicts flipped`;
+  const el = document.getElementById("counts");
+  el.replaceChildren();
+  function addBold(n) {
+    const b = document.createElement("b");
+    b.textContent = String(n);
+    el.appendChild(b);
+  }
+  addBold(keeps);
+  el.appendChild(document.createTextNode(" keep · "));
+  addBold(total - keeps);
+  el.appendChild(document.createTextNode(" drop of "));
+  addBold(total);
+  el.appendChild(document.createTextNode(" \u00a0|\u00a0 "));
+  addBold(changed);
+  el.appendChild(document.createTextNode(" verdicts flipped"));
 }
 
 function copyFeedback() {

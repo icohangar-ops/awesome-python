@@ -4,7 +4,7 @@
 {% block canonical_url %}{{ category_url }}{% endblock %}
 {% block alternate_links %}{% endblock %}
 {% block extra_head %}
-<script type="application/ld+json">{{ category_json_ld | safe }}</script>
+<script type="application/ld+json">{{ category_json_ld }}</script>
 {% endblock %}
 {% block header %}
 <header class="category-hero">
@@ -35,7 +35,7 @@
       {% endif %}
       <h1>{{ category.name }}</h1>
       {% if category.description_html %}
-      <p class="category-subtitle">{{ category.description_html | safe }}</p>
+      <p class="category-subtitle">{{ category.description_html }}</p>
       {% endif %}
     </div>
 
@@ -59,7 +59,7 @@
 </header>
 {% endblock %}
 {% block content %}
-<script type="application/json" id="filter-urls">{{ filter_urls_json | safe }}</script>
+<script type="application/json" id="filter-urls">{{ filter_urls_json }}</script>
 <section class="results-section" id="library-index">
   <div class="results-intro section-shell" data-reveal>
     <div>
@@ -225,7 +225,7 @@
         <tr class="desc-row" aria-hidden="true">
           <td class="col-num"></td>
           <td colspan="6">
-            <div class="desc-text">{{ entry.description | safe }}</div>
+            <div class="desc-text">{{ entry.description }}</div>
           </td>
         </tr>
         {% endif %}
